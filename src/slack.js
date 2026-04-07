@@ -1,5 +1,5 @@
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
-const SLACK_VA_ID = process.env.SLACK_VA_ID || '';
+const SLACK_VA_ID = process.env.SLACK_VA_ID || 'U0AQEU7HSKH';
 
 function formatSlackMessage(date, shootsWithNotes) {
   const d = new Date(date + 'T12:00:00');

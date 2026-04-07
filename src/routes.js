@@ -86,12 +86,23 @@ router.get('/debug-sync', async (req, res) => {
     results.brand = { status: r.status, body: (await r.text()).slice(0, 500) };
   } catch (err) { results.brand = { error: err.message }; }
 
-  // Test /orders (what we need)
+  // Test /orders (plural)
   try {
     const r = await fetch(`${ASPECTS_API_URL}/api/v1/orders`, { headers });
-    const body = await r.text();
-    results.orders = { status: r.status, body: body.slice(0, 2000) };
-  } catch (err) { results.orders = { error: err.message }; }
+    results.orders_plural = { status: r.status, body: (await r.text()).slice(0, 2000) };
+  } catch (err) { results.orders_plural = { error: err.message }; }
+
+  // Test /order (singular)
+  try {
+    const r = await fetch(`${ASPECTS_API_URL}/api/v1/order`, { headers });
+    results.order_singular = { status: r.status, body: (await r.text()).slice(0, 2000) };
+  } catch (err) { results.order_singular = { error: err.message }; }
+
+  // Test /site (list of sites)
+  try {
+    const r = await fetch(`${ASPECTS_API_URL}/api/v1/site`, { headers });
+    results.sites = { status: r.status, body: (await r.text()).slice(0, 2000) };
+  } catch (err) { results.sites = { error: err.message }; }
 
   // Also test the processed result
   const { fetchShootsForDate } = require('./aspects-api');

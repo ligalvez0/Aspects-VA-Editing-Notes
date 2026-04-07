@@ -39,9 +39,9 @@ async function fetchShootsForDate(date) {
   }
 
   try {
-    // HDPhotoHub API v1 - GET /orders
+    // HDPhotoHub API v1 - GET /order
     // Returns all orders; we filter by date client-side
-    const url = `${ASPECTS_API_URL}/api/v1/orders`;
+    const url = `${ASPECTS_API_URL}/api/v1/order`;
     console.log(`[Aspects] Fetching: ${url}`);
     const res = await fetch(url, {
       headers: {

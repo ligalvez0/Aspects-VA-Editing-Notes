@@ -85,20 +85,26 @@ router.get('/debug-sync', async (req, res) => {
     const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
     results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-    // Fetch specific known order to see full data shape
-    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/order?oid=2659589`, { headers, signal: AbortSignal.timeout(15000) });
-    const orderBody = await r2.text();
-    results.known_order = { status: r2.status, body: orderBody.slice(0, 3000) };
+    // Test different ways to get orders
+    // 1. orders?uid=168135 (owner - only gets orders we placed)
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=168135`, { headers, signal: AbortSignal.timeout(30000) });
+    const b2 = await r2.text();
+    results.orders_by_uid = { status: r2.status, count: b2.length, preview: b2.slice(0, 500) };
 
-    // Fetch site to see address data
-    const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=2914195`, { headers, signal: AbortSignal.timeout(15000) });
-    const siteBody = await r3.text();
-    results.known_site = { status: r3.status, body: siteBody.slice(0, 2000) };
+    // 2. Try sites endpoint with uid to get active sites
+    const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/sites?uid=168135`, { headers, signal: AbortSignal.timeout(30000) });
+    const b3 = await r3.text();
+    results.sites_by_uid = { status: r3.status, length: b3.length, preview: b3.slice(0, 500) };
 
-    // Try fetching orders for this site (to see if today's orders show up)
-    const r4 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=2914195`, { headers, signal: AbortSignal.timeout(15000) });
-    const siteOrdersBody = await r4.text();
-    results.site_orders = { status: r4.status, body: siteOrdersBody.slice(0, 2000) };
+    // 3. Try groups endpoint
+    const r4 = await fetch(`${ASPECTS_API_URL}/api/v1/groups`, { headers, signal: AbortSignal.timeout(15000) });
+    const b4 = await r4.text();
+    results.groups = { status: r4.status, body: b4.slice(0, 500) };
+
+    // 4. Try users to find other user accounts
+    const r5 = await fetch(`${ASPECTS_API_URL}/api/v1/users`, { headers, signal: AbortSignal.timeout(15000) });
+    const b5 = await r5.text();
+    results.users = { status: r5.status, length: b5.length, preview: b5.slice(0, 1000) };
   } catch (err) {
     results.error = err.message;
   }

@@ -2,35 +2,66 @@ const ASPECTS_API_URL = process.env.ASPECTS_API_URL;
 const ASPECTS_API_KEY = process.env.ASPECTS_API_KEY;
 const ASPECTS_UID = process.env.ASPECTS_UID || '168135';
 
+const headers = () => ({
+  'api_key': ASPECTS_API_KEY,
+  'Accept': 'application/json',
+});
+
 function generateMockShoots(date) {
   return {
     shoots: [
-      {
-        id: `mock-${date}-1`,
-        date,
-        address: '123 Main Street, Los Angeles, CA',
-        photographer: 'John',
-        time: '09:00 AM',
-        raw_data: '{}',
-      },
-      {
-        id: `mock-${date}-2`,
-        date,
-        address: '456 Oak Avenue, Pasadena, CA',
-        photographer: 'Sarah',
-        time: '11:30 AM',
-        raw_data: '{}',
-      },
-      {
-        id: `mock-${date}-3`,
-        date,
-        address: '789 Pine Road, Burbank, CA',
-        photographer: 'John',
-        time: '02:00 PM',
-        raw_data: '{}',
-      },
+      { id: `mock-${date}-1`, date, address: '123 Main Street, Los Angeles, CA', photographer: 'John', time: '09:00 AM', raw_data: '{}' },
+      { id: `mock-${date}-2`, date, address: '456 Oak Avenue, Pasadena, CA', photographer: 'Sarah', time: '11:30 AM', raw_data: '{}' },
+      { id: `mock-${date}-3`, date, address: '789 Pine Road, Burbank, CA', photographer: 'John', time: '02:00 PM', raw_data: '{}' },
     ],
   };
+}
+
+// Parse Aspects date format "M/D/YYYY h:mm:ss AM/PM" to YYYY-MM-DD
+function parseAspectsDate(dateStr) {
+  if (!dateStr) return null;
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    // Format as YYYY-MM-DD in Pacific time
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  } catch {
+    return null;
+  }
+}
+
+// Format time from Aspects date
+function parseAspectsTime(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
+  } catch {
+    return '';
+  }
+}
+
+// Fetch site address by sid (with simple cache)
+const siteCache = {};
+async function getSiteAddress(sid) {
+  if (siteCache[sid]) return siteCache[sid];
+  try {
+    const res = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=${sid}`, {
+      headers: headers(),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const site = await res.json();
+      const parts = [site.address, site.city, site.state, site.zip].filter(Boolean);
+      const addr = parts.length > 0 ? parts.join(', ') : `Site #${sid}`;
+      siteCache[sid] = addr;
+      return addr;
+    }
+  } catch (err) {
+    console.error(`[Aspects] Failed to fetch site ${sid}:`, err.message);
+  }
+  return `Site #${sid}`;
 }
 
 async function fetchShootsForDate(date) {
@@ -40,15 +71,11 @@ async function fetchShootsForDate(date) {
   }
 
   try {
-    // HDPhotoHub API v1 - GET /orders?uid=<UserID>
     const url = `${ASPECTS_API_URL}/api/v1/orders?uid=${ASPECTS_UID}`;
     console.log(`[Aspects] Fetching: ${url}`);
     const res = await fetch(url, {
-      headers: {
-        'api_key': ASPECTS_API_KEY,
-        'Accept': 'application/json',
-      },
-      signal: AbortSignal.timeout(30000),
+      headers: headers(),
+      signal: AbortSignal.timeout(60000),
     });
 
     const body = await res.text();
@@ -66,43 +93,32 @@ async function fetchShootsForDate(date) {
       return { error: 'Aspects API returned non-JSON response', shoots: [] };
     }
 
-    // API returns an array of order objects
     const orders = Array.isArray(data) ? data : [];
     console.log(`[Aspects] Got ${orders.length} total orders`);
 
     // Filter to orders matching the requested date
     const filtered = orders.filter((order) => {
-      if (!order.date) return false;
-      const orderDate = order.date.slice(0, 10);
+      const orderDate = parseAspectsDate(order.date);
       return orderDate === date;
     });
 
     console.log(`[Aspects] ${filtered.length} orders match date ${date}`);
 
-    // Map to our internal format using site address data
-    const shoots = filtered.map((order) => {
-      // Address from the order's site
-      const address = order.address || order.siteAddress || `Order #${order.oid}`;
+    // Map to our internal format, fetching site addresses
+    const shoots = await Promise.all(filtered.map(async (order) => {
+      const address = await getSiteAddress(order.sid);
 
-      // Photographer from first task's memberassigned
       let photographer = '';
       if (order.tasks && order.tasks.length > 0) {
         photographer = order.tasks[0].memberassigned || '';
       }
 
-      // Time from task appointment date or order date
       let time = '';
       if (order.tasks && order.tasks.length > 0 && order.tasks[0].apptdate) {
-        const d = new Date(order.tasks[0].apptdate);
-        if (!isNaN(d.getTime())) {
-          time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
-        }
+        time = parseAspectsTime(order.tasks[0].apptdate);
       }
       if (!time && order.date) {
-        const d = new Date(order.date);
-        if (!isNaN(d.getTime()) && (d.getUTCHours() !== 0 || d.getUTCMinutes() !== 0)) {
-          time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
-        }
+        time = parseAspectsTime(order.date);
       }
 
       return {
@@ -113,7 +129,7 @@ async function fetchShootsForDate(date) {
         time,
         raw_data: JSON.stringify(order),
       };
-    });
+    }));
 
     return { shoots };
   } catch (err) {

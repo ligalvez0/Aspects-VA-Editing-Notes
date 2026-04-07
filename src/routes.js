@@ -85,29 +85,25 @@ router.get('/debug-sync', async (req, res) => {
     const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
     results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-    // Fetch sites without uid (all brand sites) - may be large
-    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/sites`, { headers, signal: AbortSignal.timeout(60000) });
+    // Try fetching sites with address search for known shoot
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/sites?address=Nuthatch`, { headers, signal: AbortSignal.timeout(30000) });
     const b2 = await r2.text();
-    results.all_sites_status = r2.status;
-    results.all_sites_length = b2.length;
+    results.sites_search = { status: r2.status, length: b2.length, preview: b2.slice(0, 1500) };
 
-    if (r2.status === 200) {
-      const sites = JSON.parse(b2);
-      const siteList = Array.isArray(sites) ? sites : [];
-      results.total_sites = siteList.length;
+    // Try /orders with sid of known today's shoot
+    const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=2914195`, { headers, signal: AbortSignal.timeout(15000) });
+    const b3 = await r3.text();
+    results.known_site_orders = { status: r3.status, preview: b3.slice(0, 1500) };
 
-      // Count by status
-      const statusCounts = {};
-      siteList.forEach(s => { statusCounts[s.status] = (statusCounts[s.status] || 0) + 1; });
-      results.status_counts = statusCounts;
+    // Try getting all users to find client user IDs
+    const r4 = await fetch(`${ASPECTS_API_URL}/api/v1/users?type=client`, { headers, signal: AbortSignal.timeout(30000) });
+    const b4 = await r4.text();
+    results.client_users = { status: r4.status, length: b4.length, preview: b4.slice(0, 500) };
 
-      // Show "preparing" sites (these are likely today's shoots)
-      const preparing = siteList.filter(s => s.status === 'preparing');
-      results.preparing_count = preparing.length;
-      results.preparing_sites = preparing.slice(0, 10).map(s => ({
-        sid: s.sid, address: s.address, city: s.city, state: s.state, created: s.created
-      }));
-    }
+    // Try orders without uid (all brand orders)
+    const r5 = await fetch(`${ASPECTS_API_URL}/api/v1/orders`, { headers, signal: AbortSignal.timeout(30000) });
+    const b5 = await r5.text();
+    results.all_orders = { status: r5.status, length: b5.length, preview: b5.slice(0, 500) };
   } catch (err) {
     results.error = err.message;
   }

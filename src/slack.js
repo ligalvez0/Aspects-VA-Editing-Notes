@@ -1,10 +1,14 @@
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+const SLACK_VA_ID = process.env.SLACK_VA_ID || '';
 
 function formatSlackMessage(date, shootsWithNotes) {
   const d = new Date(date + 'T12:00:00');
   const dayName = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  let text = `:camera_with_flash: *Editing Notes for ${dayName}*\n\n`;
+  // Mention VA by Slack user ID if set, otherwise by name
+  const mention = SLACK_VA_ID ? `<@${SLACK_VA_ID}>` : '@Stephen Cruz';
+
+  let text = `:camera_with_flash: *Editing Notes for ${dayName}*\n${mention}\n\n`;
 
   if (shootsWithNotes.length === 0) {
     text += '_No shoots scheduled for today._';

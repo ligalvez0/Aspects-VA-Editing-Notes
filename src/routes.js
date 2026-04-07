@@ -67,38 +67,35 @@ router.post('/slack/send', async (req, res) => {
   }
 });
 
-// Debug: show raw Aspects API response so we can see the data format
+// Debug: show raw Aspects API response
 router.get('/debug-sync', async (req, res) => {
   const date = req.query.date || todayDate();
   const ASPECTS_API_URL = process.env.ASPECTS_API_URL;
   const ASPECTS_API_KEY = process.env.ASPECTS_API_KEY;
 
   if (!ASPECTS_API_URL || !ASPECTS_API_KEY) {
-    return res.json({ error: 'No API configured', ASPECTS_API_URL, ASPECTS_API_KEY: ASPECTS_API_KEY ? '(set)' : '(not set)' });
+    return res.json({ error: 'No API configured' });
   }
 
-  // Test with correct api_key header (from docs) and a few endpoint variations
-  const baseHeaders = { 'api_key': ASPECTS_API_KEY };
-  const tests = [
-    { label: 'api_key header - /order (list)', url: `${ASPECTS_API_URL}/api/v1/order`, headers: baseHeaders },
-    { label: 'api_key header - /order?date', url: `${ASPECTS_API_URL}/api/v1/order?date=${date}`, headers: baseHeaders },
-    { label: 'api_key header - /orders', url: `${ASPECTS_API_URL}/api/v1/orders?date=${date}`, headers: baseHeaders },
-    { label: 'api_key header - /site', url: `${ASPECTS_API_URL}/api/v1/site`, headers: baseHeaders },
-    { label: 'api_key header - /brand', url: `${ASPECTS_API_URL}/api/v1/brand`, headers: baseHeaders },
-  ];
+  const headers = { 'api_key': ASPECTS_API_KEY, 'Accept': 'application/json' };
+  const results = {};
 
-  const results = [];
-  for (const test of tests) {
-    try {
-      const r = await fetch(test.url, {
-        headers: { 'Accept': 'application/json', ...test.headers },
-      });
-      const body = await r.text();
-      results.push({ label: test.label, url: test.url, status: r.status, body: body.slice(0, 500) });
-    } catch (err) {
-      results.push({ label: test.label, url: test.url, error: err.message });
-    }
-  }
+  // Test /brand (simplest endpoint to verify auth)
+  try {
+    const r = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers });
+    results.brand = { status: r.status, body: (await r.text()).slice(0, 500) };
+  } catch (err) { results.brand = { error: err.message }; }
+
+  // Test /orders (what we need)
+  try {
+    const r = await fetch(`${ASPECTS_API_URL}/api/v1/orders`, { headers });
+    const body = await r.text();
+    results.orders = { status: r.status, body: body.slice(0, 2000) };
+  } catch (err) { results.orders = { error: err.message }; }
+
+  // Also test the processed result
+  const { fetchShootsForDate } = require('./aspects-api');
+  results.processed = await fetchShootsForDate(date);
 
   res.json({ date, results });
 });

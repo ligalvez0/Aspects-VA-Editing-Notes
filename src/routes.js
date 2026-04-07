@@ -86,28 +86,27 @@ router.get('/debug-sync', async (req, res) => {
     results.brand = { status: r.status, body: (await r.text()).slice(0, 500) };
   } catch (err) { results.brand = { error: err.message }; }
 
-  const bid = 2194; // brand ID from /brand response
-  const endpoints = [
-    `/api/v1/orders`,
-    `/api/v1/orders?bid=${bid}`,
-    `/api/v1/order`,
-    `/api/v1/order?bid=${bid}`,
-    `/api/v1/sites`,
-    `/api/v1/sites?bid=${bid}`,
-    `/api/v1/site?bid=${bid}`,
-    `/api/v1/groups`,
-    `/api/v1/group`,
-    `/api/v1/users`,
-    `/api/v1/user`,
-  ];
+  // Get sites list first, then use first site's sid to fetch orders
+  try {
+    const r = await fetch(`${ASPECTS_API_URL}/api/v1/sites`, { headers });
+    const body = await r.text();
+    results.sites = { status: r.status, body: body.slice(0, 3000) };
 
-  for (const ep of endpoints) {
-    try {
-      const r = await fetch(`${ASPECTS_API_URL}${ep}`, { headers });
-      const body = await r.text();
-      results[ep] = { status: r.status, body: body.slice(0, 500) };
-    } catch (err) { results[ep] = { error: err.message }; }
-  }
+    // If sites worked, try orders with the first site's sid
+    if (r.status === 200) {
+      try {
+        const sites = JSON.parse(body);
+        const siteList = Array.isArray(sites) ? sites : [];
+        results.site_count = siteList.length;
+        if (siteList.length > 0) {
+          const sid = siteList[0].sid;
+          results.first_site_sid = sid;
+          const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${sid}`, { headers });
+          results.orders_with_sid = { status: r2.status, body: (await r2.text()).slice(0, 3000) };
+        }
+      } catch (parseErr) { results.parse_error = parseErr.message; }
+    }
+  } catch (err) { results.sites = { error: err.message }; }
 
   // Also test the processed result
   const { fetchShootsForDate } = require('./aspects-api');

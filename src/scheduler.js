@@ -16,9 +16,9 @@ function startScheduler() {
     const date = todayDate();
     console.log(`[Scheduler] Running morning sync for ${date}`);
     try {
-      const shoots = await fetchShootsForDate(date);
-      if (shoots.length > 0) upsertShoots(shoots);
-      console.log(`[Scheduler] Synced ${shoots.length} shoots`);
+      const result = await fetchShootsForDate(date);
+      if (result.shoots && result.shoots.length > 0) upsertShoots(result.shoots);
+      console.log(`[Scheduler] Synced ${result.shoots ? result.shoots.length : 0} shoots`);
     } catch (err) {
       console.error('[Scheduler] Sync failed:', err.message);
     }

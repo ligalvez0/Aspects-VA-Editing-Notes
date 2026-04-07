@@ -19,12 +19,12 @@ router.get('/shoots', (req, res) => {
 router.post('/sync', async (req, res) => {
   const date = req.body.date || todayDate();
   try {
-    const shoots = await fetchShootsForDate(date);
-    if (shoots.length > 0) {
-      upsertShoots(shoots);
+    const result = await fetchShootsForDate(date);
+    if (result.shoots && result.shoots.length > 0) {
+      upsertShoots(result.shoots);
     }
     const updated = getShootsByDate(date);
-    res.json({ date, synced: shoots.length, shoots: updated });
+    res.json({ date, synced: result.shoots ? result.shoots.length : 0, error: result.error || null, shoots: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

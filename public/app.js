@@ -163,7 +163,11 @@
     btn.disabled = true;
     btn.textContent = 'Syncing...';
     const data = await api('POST', '/sync', { date: currentDate });
-    toast(`Synced ${data.synced || 0} shoots`);
+    if (data.error) {
+      toast(`Sync error: ${data.error.slice(0, 100)}`);
+    } else {
+      toast(`Synced ${data.synced || 0} shoots`);
+    }
     btn.disabled = false;
     btn.textContent = 'Sync Shoots';
     loadShoots();

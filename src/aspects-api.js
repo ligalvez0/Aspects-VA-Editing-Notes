@@ -34,13 +34,12 @@ function toTimeStr(dateStr) {
   } catch { return ''; }
 }
 
-// Cache for site addresses
 const siteCache = {};
 async function getSiteAddress(sid) {
   if (siteCache[sid]) return siteCache[sid];
   try {
     const res = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=${sid}`, {
-      headers: apiHeaders(), signal: AbortSignal.timeout(10000),
+      headers: apiHeaders(), signal: AbortSignal.timeout(8000),
     });
     if (res.ok) {
       const site = await res.json();
@@ -52,6 +51,32 @@ async function getSiteAddress(sid) {
   return `Site #${sid}`;
 }
 
+// Fetch a single client's orders and return any matching today's date
+async function checkClientOrders(uid, date) {
+  try {
+    const res = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=${uid}`, {
+      headers: apiHeaders(), signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+    const text = await res.text();
+    if (!text || text === '[]' || text.length < 5) return [];
+    const orders = JSON.parse(text);
+    if (!Array.isArray(orders)) return [];
+
+    const matches = [];
+    for (const order of orders) {
+      if (!order.tasks) continue;
+      for (const task of order.tasks) {
+        if (toDateStr(task.apptdate) === date) {
+          matches.push({ order, task });
+          break;
+        }
+      }
+    }
+    return matches;
+  } catch { return []; }
+}
+
 async function fetchShootsForDate(date) {
   if (!ASPECTS_API_URL || !ASPECTS_API_KEY) {
     console.log('[Aspects] No API configured — using mock data');
@@ -59,7 +84,7 @@ async function fetchShootsForDate(date) {
   }
 
   try {
-    // Step 1: Get all active client users
+    // Step 1: Get all users
     console.log('[Aspects] Fetching users...');
     const usersRes = await fetch(`${ASPECTS_API_URL}/api/v1/users`, {
       headers: apiHeaders(), signal: AbortSignal.timeout(30000),
@@ -68,64 +93,52 @@ async function fetchShootsForDate(date) {
       return { error: `Failed to fetch users: ${usersRes.status}`, shoots: [] };
     }
     const allUsers = await usersRes.json();
-    const clients = Array.isArray(allUsers)
-      ? allUsers.filter(u => u.type === 'client' && u.status === 'active')
+
+    // Get all active clients AND team members (shoots might be under either)
+    const relevantUsers = Array.isArray(allUsers)
+      ? allUsers.filter(u => u.status === 'active')
       : [];
-    console.log(`[Aspects] Found ${clients.length} active clients`);
+    console.log(`[Aspects] Found ${relevantUsers.length} active users`);
 
-    // Step 2: Fetch orders for each client in batches, look for today's apptdate
-    const shoots = [];
+    // Step 2: Check all users' orders in parallel batches of 25
+    const allMatches = [];
     const seenOids = new Set();
-    const batchSize = 10;
+    const batchSize = 25;
 
-    for (let i = 0; i < clients.length; i += batchSize) {
-      const batch = clients.slice(i, i + batchSize);
-      const promises = batch.map(async (client) => {
-        try {
-          const res = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=${client.uid}`, {
-            headers: apiHeaders(), signal: AbortSignal.timeout(10000),
-          });
-          if (!res.ok) return [];
-          const orders = await res.json();
-          if (!Array.isArray(orders)) return [];
-
-          const matches = [];
-          for (const order of orders) {
-            if (!order.tasks || seenOids.has(order.oid)) continue;
-            for (const task of order.tasks) {
-              if (toDateStr(task.apptdate) === date) {
-                seenOids.add(order.oid);
-                matches.push({ order, task });
-                break;
-              }
-            }
+    for (let i = 0; i < relevantUsers.length; i += batchSize) {
+      const batch = relevantUsers.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map(u => checkClientOrders(u.uid, date))
+      );
+      for (const matches of results) {
+        for (const match of matches) {
+          if (!seenOids.has(match.order.oid)) {
+            seenOids.add(match.order.oid);
+            allMatches.push(match);
           }
-          return matches;
-        } catch { return []; }
-      });
-
-      const batchResults = await Promise.all(promises);
-      for (const matches of batchResults) {
-        for (const { order, task } of matches) {
-          const address = await getSiteAddress(order.sid);
-          shoots.push({
-            id: String(order.oid),
-            date,
-            address,
-            photographer: task.memberassigned || '',
-            time: toTimeStr(task.apptdate),
-            raw_data: JSON.stringify(order),
-          });
         }
       }
-
-      // Log progress
-      if ((i + batchSize) % 50 === 0) {
-        console.log(`[Aspects] Processed ${i + batchSize}/${clients.length} clients, found ${shoots.length} shoots so far`);
-      }
+      console.log(`[Aspects] Checked ${Math.min(i + batchSize, relevantUsers.length)}/${relevantUsers.length} users, found ${allMatches.length} shoots`);
     }
 
-    console.log(`[Aspects] Found ${shoots.length} shoots for ${date}`);
+    console.log(`[Aspects] Total: ${allMatches.length} shoots for ${date}`);
+
+    // Step 3: Resolve site addresses in parallel
+    const shoots = await Promise.all(allMatches.map(async ({ order, task }) => {
+      const address = await getSiteAddress(order.sid);
+      return {
+        id: String(order.oid),
+        date,
+        address,
+        photographer: task.memberassigned || '',
+        time: toTimeStr(task.apptdate),
+        raw_data: JSON.stringify(order),
+      };
+    }));
+
+    // Sort by time
+    shoots.sort((a, b) => a.time.localeCompare(b.time));
+
     return { shoots };
   } catch (err) {
     console.error('[Aspects] API fetch failed:', err.message);

@@ -125,7 +125,23 @@ header h1 {
 
 .shoot-header {
   margin-bottom: 8px;
+  position: relative;
 }
+
+.shoot-delete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.shoot-delete:hover { color: var(--danger); }
 
 .shoot-address {
   font-weight: 700;

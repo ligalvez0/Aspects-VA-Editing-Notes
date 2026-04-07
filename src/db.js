@@ -83,4 +83,9 @@ function deleteNote(noteId) {
   db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
 }
 
-module.exports = { initDb, getDb, upsertShoots, getShootsByDate, addNote, updateNote, deleteNote };
+function deleteShoot(shootId) {
+  db.prepare('DELETE FROM notes WHERE shoot_id = ?').run(shootId);
+  db.prepare('DELETE FROM shoots WHERE id = ?').run(shootId);
+}
+
+module.exports = { initDb, getDb, upsertShoots, getShootsByDate, addNote, updateNote, deleteNote, deleteShoot };

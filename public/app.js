@@ -49,7 +49,7 @@
 
   function render(shoots) {
     if (shoots.length === 0) {
-      container.innerHTML = '<div class="empty">No shoots for this date.<br>Click "Sync Shoots" to pull from Aspects.</div>';
+      container.innerHTML = '<div class="empty">No shoots for this date.<br>Use the search bar above to find and add shoots.</div>';
       return;
     }
 
@@ -60,7 +60,7 @@
           <span class="note-bullet">&#x2022;</span>
           <span class="note-content" title="Click to edit">${esc(note.content)}</span>
           ${note.author ? '<span class="note-author">' + esc(note.author) + '</span>' : ''}
-          <button class="note-delete" title="Delete">&times;</button>
+          <button class="note-delete" title="Delete note">&times;</button>
         </li>
       `).join('');
 
@@ -68,6 +68,7 @@
         <div class="shoot-card" data-shoot-id="${shoot.id}">
           <div class="shoot-header">
             <div class="shoot-address">${esc(shoot.address)}</div>
+            <button class="shoot-delete" title="Remove property">&times;</button>
             ${meta ? '<div class="shoot-meta">' + esc(meta) + '</div>' : ''}
           </div>
           <ul class="notes-list">
@@ -81,7 +82,7 @@
       `;
     }).join('');
 
-    // Attach event listeners
+    // Note add handlers
     container.querySelectorAll('.add-note-btn').forEach(btn => {
       const card = btn.closest('.shoot-card');
       const input = card.querySelector('.note-input');
@@ -90,12 +91,24 @@
       input.addEventListener('keydown', e => { if (e.key === 'Enter') handler(); });
     });
 
+    // Note delete handlers
     container.querySelectorAll('.note-delete').forEach(btn => {
       btn.addEventListener('click', () => deleteNoteHandler(btn.closest('.note-item').dataset.noteId));
     });
 
+    // Note edit handlers
     container.querySelectorAll('.note-content').forEach(span => {
       span.addEventListener('click', () => editNoteHandler(span));
+    });
+
+    // Shoot delete handlers
+    container.querySelectorAll('.shoot-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const card = btn.closest('.shoot-card');
+        if (confirm('Remove this property?')) {
+          deleteShootHandler(card.dataset.shootId);
+        }
+      });
     });
   }
 
@@ -109,6 +122,12 @@
 
   async function deleteNoteHandler(noteId) {
     await api('DELETE', '/notes/' + noteId);
+    loadShoots();
+  }
+
+  async function deleteShootHandler(shootId) {
+    await api('DELETE', '/shoots/' + shootId);
+    toast('Property removed');
     loadShoots();
   }
 
@@ -154,26 +173,6 @@
 
   document.getElementById('next-day').addEventListener('click', () => {
     currentDate = shiftDate(currentDate, 1);
-    loadShoots();
-  });
-
-  // Sync button
-  document.getElementById('sync-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('sync-btn');
-    btn.disabled = true;
-    btn.textContent = 'Syncing (may take 1-2 min)...';
-    try {
-      const data = await api('POST', '/sync', { date: currentDate });
-      if (data.error) {
-        toast(`Sync error: ${data.error.slice(0, 100)}`);
-      } else {
-        toast(`Synced ${data.synced || 0} shoots`);
-      }
-    } catch (err) {
-      toast('Sync timed out — try again');
-    }
-    btn.disabled = false;
-    btn.textContent = 'Sync Shoots';
     loadShoots();
   });
 

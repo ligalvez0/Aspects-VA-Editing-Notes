@@ -1,6 +1,5 @@
 const ASPECTS_API_URL = process.env.ASPECTS_API_URL;
 const ASPECTS_API_KEY = process.env.ASPECTS_API_KEY;
-const ASPECTS_UID = process.env.ASPECTS_UID || '168135';
 
 const apiHeaders = () => ({
   'api_key': ASPECTS_API_KEY,
@@ -17,7 +16,6 @@ function generateMockShoots(date) {
   };
 }
 
-// Parse Aspects date "M/D/YYYY h:mm:ss AM/PM" to YYYY-MM-DD in Pacific time
 function toDateStr(dateStr) {
   if (!dateStr) return null;
   try {
@@ -43,76 +41,74 @@ async function fetchShootsForDate(date) {
   }
 
   try {
-    // Step 1: Fetch all orders for our user
-    const url = `${ASPECTS_API_URL}/api/v1/orders?uid=${ASPECTS_UID}`;
-    console.log(`[Aspects] Fetching orders: ${url}`);
-    const res = await fetch(url, {
+    // Step 1: Get all "preparing" sites — these are active shoots
+    // Fetch all sites and filter for "preparing" status
+    console.log('[Aspects] Fetching all sites...');
+    const sitesRes = await fetch(`${ASPECTS_API_URL}/api/v1/sites`, {
       headers: apiHeaders(),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(120000), // 2 min timeout for large list
     });
 
-    const body = await res.text();
-    if (!res.ok) {
-      return { error: `API returned ${res.status}: ${body.slice(0, 200)}`, shoots: [] };
+    if (!sitesRes.ok) {
+      return { error: `Failed to fetch sites: ${sitesRes.status}`, shoots: [] };
     }
 
-    let orders;
-    try { orders = JSON.parse(body); } catch {
-      return { error: 'Non-JSON response from API', shoots: [] };
-    }
-    if (!Array.isArray(orders)) orders = [];
-    console.log(`[Aspects] Got ${orders.length} total orders`);
+    const allSites = await sitesRes.json();
+    const sites = Array.isArray(allSites) ? allSites : [];
+    console.log(`[Aspects] Got ${sites.length} total sites`);
 
-    // Step 2: Filter orders that have tasks with apptdate matching today
-    const matchingOrders = orders.filter((order) => {
-      if (!order.tasks || order.tasks.length === 0) return false;
-      return order.tasks.some((task) => toDateStr(task.apptdate) === date);
-    });
+    // Filter for "preparing" status sites (active shoots awaiting photo/editing)
+    const preparingSites = sites.filter(s => s.status === 'preparing');
+    console.log(`[Aspects] ${preparingSites.length} sites in "preparing" status`);
 
-    console.log(`[Aspects] ${matchingOrders.length} orders have tasks on ${date}`);
-    if (matchingOrders.length === 0) {
+    if (preparingSites.length === 0) {
       return { shoots: [] };
     }
 
-    // Step 3: Fetch site details for each matching order to get addresses
-    const shoots = await Promise.all(matchingOrders.map(async (order) => {
-      // Get site address
-      let address = `Order #${order.oid}`;
-      try {
-        const siteRes = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=${order.sid}`, {
-          headers: apiHeaders(),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (siteRes.ok) {
-          const site = await siteRes.json();
-          const parts = [site.address, site.city, site.state, site.zip].filter(Boolean);
-          if (parts.length > 0) address = parts.join(', ');
-        }
-      } catch (err) {
-        console.error(`[Aspects] Failed to fetch site ${order.sid}:`, err.message);
+    // Step 2: Fetch orders for each preparing site to check for today's apptdate
+    const shoots = [];
+    const batchSize = 5;
+
+    for (let i = 0; i < preparingSites.length; i += batchSize) {
+      const batch = preparingSites.slice(i, i + batchSize);
+      const promises = batch.map(async (site) => {
+        try {
+          const ordersRes = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${site.sid}`, {
+            headers: apiHeaders(),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!ordersRes.ok) return null;
+          const orders = await ordersRes.json();
+          if (!Array.isArray(orders)) return null;
+
+          // Find orders with tasks scheduled for today
+          for (const order of orders) {
+            if (!order.tasks) continue;
+            for (const task of order.tasks) {
+              if (toDateStr(task.apptdate) === date) {
+                const address = [site.address, site.city, site.state, site.zip].filter(Boolean).join(', ');
+                return {
+                  id: String(order.oid),
+                  date,
+                  address: address || `Site #${site.sid}`,
+                  photographer: task.memberassigned || '',
+                  time: toTimeStr(task.apptdate),
+                  raw_data: JSON.stringify({ order, site: { sid: site.sid, address: site.address, city: site.city } }),
+                };
+              }
+            }
+          }
+          return null;
+        } catch { return null; }
+      });
+
+      const results = await Promise.all(promises);
+      for (const r of results) {
+        if (r) shoots.push(r);
       }
+    }
 
-      // Get photographer and time from first task with matching apptdate
-      let photographer = '';
-      let time = '';
-      for (const task of order.tasks) {
-        if (toDateStr(task.apptdate) === date) {
-          photographer = task.memberassigned || '';
-          time = toTimeStr(task.apptdate);
-          break;
-        }
-      }
-
-      return {
-        id: String(order.oid),
-        date,
-        address,
-        photographer,
-        time,
-        raw_data: JSON.stringify(order),
-      };
-    }));
-
+    console.log(`[Aspects] Found ${shoots.length} shoots for ${date}`);
     return { shoots };
   } catch (err) {
     console.error('[Aspects] API fetch failed:', err.message);

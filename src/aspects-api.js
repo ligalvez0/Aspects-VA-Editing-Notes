@@ -39,7 +39,7 @@ async function getSiteAddress(sid) {
   if (siteCache[sid]) return siteCache[sid];
   try {
     const res = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=${sid}`, {
-      headers: apiHeaders(), signal: AbortSignal.timeout(8000),
+      headers: apiHeaders(), signal: AbortSignal.timeout(10000),
     });
     if (res.ok) {
       const site = await res.json();
@@ -49,32 +49,6 @@ async function getSiteAddress(sid) {
     }
   } catch {}
   return `Site #${sid}`;
-}
-
-// Fetch a single client's orders and return any matching today's date
-async function checkClientOrders(uid, date) {
-  try {
-    const res = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=${uid}`, {
-      headers: apiHeaders(), signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return [];
-    const text = await res.text();
-    if (!text || text === '[]' || text.length < 5) return [];
-    const orders = JSON.parse(text);
-    if (!Array.isArray(orders)) return [];
-
-    const matches = [];
-    for (const order of orders) {
-      if (!order.tasks) continue;
-      for (const task of order.tasks) {
-        if (toDateStr(task.apptdate) === date) {
-          matches.push({ order, task });
-          break;
-        }
-      }
-    }
-    return matches;
-  } catch { return []; }
 }
 
 async function fetchShootsForDate(date) {
@@ -93,32 +67,50 @@ async function fetchShootsForDate(date) {
       return { error: `Failed to fetch users: ${usersRes.status}`, shoots: [] };
     }
     const allUsers = await usersRes.json();
-
-    // Get all active clients AND team members (shoots might be under either)
-    const relevantUsers = Array.isArray(allUsers)
-      ? allUsers.filter(u => u.status === 'active')
+    const clients = Array.isArray(allUsers)
+      ? allUsers.filter(u => u.type === 'client' && u.status === 'active')
       : [];
-    console.log(`[Aspects] Found ${relevantUsers.length} active users`);
+    console.log(`[Aspects] Found ${clients.length} active clients`);
 
-    // Step 2: Check all users' orders in parallel batches of 25
+    // Step 2: Fetch orders for ALL clients in parallel batches of 10
+    // Use 10s timeout (the 5s was too aggressive)
     const allMatches = [];
     const seenOids = new Set();
-    const batchSize = 25;
+    const batchSize = 10;
 
-    for (let i = 0; i < relevantUsers.length; i += batchSize) {
-      const batch = relevantUsers.slice(i, i + batchSize);
+    for (let i = 0; i < clients.length; i += batchSize) {
+      const batch = clients.slice(i, i + batchSize);
       const results = await Promise.all(
-        batch.map(u => checkClientOrders(u.uid, date))
+        batch.map(async (client) => {
+          try {
+            const res = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=${client.uid}`, {
+              headers: apiHeaders(), signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) return [];
+            const orders = await res.json();
+            if (!Array.isArray(orders)) return [];
+
+            const matches = [];
+            for (const order of orders) {
+              if (!order.tasks || seenOids.has(order.oid)) continue;
+              for (const task of order.tasks) {
+                if (toDateStr(task.apptdate) === date) {
+                  seenOids.add(order.oid);
+                  matches.push({ order, task });
+                  break;
+                }
+              }
+            }
+            return matches;
+          } catch { return []; }
+        })
       );
+
       for (const matches of results) {
-        for (const match of matches) {
-          if (!seenOids.has(match.order.oid)) {
-            seenOids.add(match.order.oid);
-            allMatches.push(match);
-          }
-        }
+        for (const match of matches) allMatches.push(match);
       }
-      console.log(`[Aspects] Checked ${Math.min(i + batchSize, relevantUsers.length)}/${relevantUsers.length} users, found ${allMatches.length} shoots`);
+
+      console.log(`[Aspects] Checked ${Math.min(i + batchSize, clients.length)}/${clients.length} clients, found ${allMatches.length} shoots`);
     }
 
     console.log(`[Aspects] Total: ${allMatches.length} shoots for ${date}`);
@@ -136,9 +128,7 @@ async function fetchShootsForDate(date) {
       };
     }));
 
-    // Sort by time
     shoots.sort((a, b) => a.time.localeCompare(b.time));
-
     return { shoots };
   } catch (err) {
     console.error('[Aspects] API fetch failed:', err.message);

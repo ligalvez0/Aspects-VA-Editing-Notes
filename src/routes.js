@@ -77,29 +77,31 @@ router.get('/debug-sync', async (req, res) => {
     return res.json({ error: 'No API configured', ASPECTS_API_URL, ASPECTS_API_KEY: ASPECTS_API_KEY ? '(set)' : '(not set)' });
   }
 
-  // Try multiple possible endpoints
-  const urls = [
-    `${ASPECTS_API_URL}/api/v1/orders?date=${date}`,
-    `${ASPECTS_API_URL}/api/v1/orders?date=${date}&apiKey=${ASPECTS_API_KEY}`,
-    `${ASPECTS_API_URL}/api/v1/jobs?date=${date}`,
-    `${ASPECTS_API_URL}/api/v1/shoots?date=${date}`,
-    `${ASPECTS_API_URL}/api/v1/schedule?date=${date}`,
+  // Try multiple auth methods against the orders endpoint
+  const baseUrl = `${ASPECTS_API_URL}/api/v1/orders?date=${date}`;
+  const tests = [
+    { label: 'Bearer header', url: baseUrl, headers: { 'Authorization': `Bearer ${ASPECTS_API_KEY}` } },
+    { label: 'X-API-Key header', url: baseUrl, headers: { 'X-API-Key': ASPECTS_API_KEY } },
+    { label: 'ApiKey header', url: baseUrl, headers: { 'ApiKey': ASPECTS_API_KEY } },
+    { label: 'Api-Key header', url: baseUrl, headers: { 'Api-Key': ASPECTS_API_KEY } },
+    { label: 'apikey query param', url: `${baseUrl}&apikey=${ASPECTS_API_KEY}`, headers: {} },
+    { label: 'key query param', url: `${baseUrl}&key=${ASPECTS_API_KEY}`, headers: {} },
+    { label: 'token query param', url: `${baseUrl}&token=${ASPECTS_API_KEY}`, headers: {} },
+    { label: 'Basic auth', url: baseUrl, headers: { 'Authorization': `Basic ${Buffer.from(ASPECTS_API_KEY + ':').toString('base64')}` } },
+    { label: 'Dashboard endpoint', url: `${ASPECTS_API_URL}/Dashboard/api/orders?date=${date}&apiKey=${ASPECTS_API_KEY}`, headers: {} },
+    { label: 'No v1 prefix', url: `${ASPECTS_API_URL}/api/orders?date=${date}&apiKey=${ASPECTS_API_KEY}`, headers: {} },
   ];
 
   const results = [];
-  for (const url of urls) {
+  for (const test of tests) {
     try {
-      const r = await fetch(url, {
-        headers: {
-          'X-API-Key': ASPECTS_API_KEY,
-          'Authorization': `Bearer ${ASPECTS_API_KEY}`,
-          'Accept': 'application/json',
-        },
+      const r = await fetch(test.url, {
+        headers: { 'Accept': 'application/json', ...test.headers },
       });
       const body = await r.text();
-      results.push({ url, status: r.status, body: body.slice(0, 1000) });
+      results.push({ label: test.label, url: test.url, status: r.status, body: body.slice(0, 500) });
     } catch (err) {
-      results.push({ url, error: err.message });
+      results.push({ label: test.label, url: test.url, error: err.message });
     }
   }
 

@@ -136,4 +136,56 @@ async function fetchShootsForDate(date) {
   }
 }
 
-module.exports = { fetchShootsForDate };
+// Search for a specific shoot by address — fast single lookup
+async function searchShootByAddress(addressQuery, date) {
+  if (!ASPECTS_API_URL || !ASPECTS_API_KEY) {
+    return { error: 'No API configured' };
+  }
+
+  try {
+    // Search sites by address
+    const res = await fetch(`${ASPECTS_API_URL}/api/v1/sites?address=${encodeURIComponent(addressQuery)}`, {
+      headers: apiHeaders(), signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return { error: `Sites search failed: ${res.status}` };
+    const sites = await res.json();
+    if (!Array.isArray(sites) || sites.length === 0) return { error: 'No sites found for that address' };
+
+    // Check each matching site's orders for today's appointment
+    for (const site of sites) {
+      try {
+        const ordersRes = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${site.sid}`, {
+          headers: apiHeaders(), signal: AbortSignal.timeout(10000),
+        });
+        if (!ordersRes.ok) continue;
+        const orders = await ordersRes.json();
+        if (!Array.isArray(orders)) continue;
+
+        for (const order of orders) {
+          if (!order.tasks) continue;
+          for (const task of order.tasks) {
+            if (toDateStr(task.apptdate) === date) {
+              const address = [site.address, site.city, site.state, site.zip].filter(Boolean).join(', ');
+              return {
+                shoot: {
+                  id: String(order.oid),
+                  date,
+                  address,
+                  photographer: task.memberassigned || '',
+                  time: toTimeStr(task.apptdate),
+                  raw_data: JSON.stringify(order),
+                },
+              };
+            }
+          }
+        }
+      } catch { continue; }
+    }
+
+    return { error: 'No orders with today\'s appointment found for that address' };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+module.exports = { fetchShootsForDate, searchShootByAddress };

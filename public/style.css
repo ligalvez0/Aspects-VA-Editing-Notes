@@ -84,6 +84,20 @@ header h1 {
 .btn-outline { background: var(--card); border: 1px solid var(--border); color: var(--text); }
 .btn-outline:hover { background: var(--bg); }
 
+.add-shoot-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.add-shoot-bar input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
 .author-bar {
   display: flex;
   align-items: center;

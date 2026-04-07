@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { upsertShoots, getShootsByDate, addNote, updateNote, deleteNote } = require('./db');
-const { fetchShootsForDate } = require('./aspects-api');
+const { fetchShootsForDate, searchShootByAddress } = require('./aspects-api');
 const { formatSlackMessage, sendToSlack } = require('./slack');
 
 function todayDate() {
@@ -52,6 +52,36 @@ router.put('/notes/:id', (req, res) => {
 router.delete('/notes/:id', (req, res) => {
   deleteNote(req.params.id);
   res.json({ ok: true });
+});
+
+// Search for a shoot by address and add it
+router.post('/search-shoot', async (req, res) => {
+  const { address, date } = req.body;
+  if (!address) return res.status(400).json({ error: 'address is required' });
+  const targetDate = date || todayDate();
+  try {
+    const result = await searchShootByAddress(address, targetDate);
+    if (result.shoot) {
+      upsertShoots([result.shoot]);
+      const updated = getShootsByDate(targetDate);
+      res.json({ found: true, shoot: result.shoot, shoots: updated });
+    } else {
+      res.json({ found: false, error: result.error || 'No matching shoot found' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add a shoot manually (no API needed)
+router.post('/shoots', (req, res) => {
+  const { date, address, photographer, time } = req.body;
+  if (!address) return res.status(400).json({ error: 'address is required' });
+  const targetDate = date || todayDate();
+  const id = `manual-${Date.now()}`;
+  upsertShoots([{ id, date: targetDate, address, photographer: photographer || '', time: time || '', raw_data: '{}' }]);
+  const updated = getShootsByDate(targetDate);
+  res.json({ shoots: updated });
 });
 
 // Send Slack message for a date

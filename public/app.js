@@ -177,6 +177,37 @@
     loadShoots();
   });
 
+  // Search shoot by address
+  document.getElementById('search-btn').addEventListener('click', async () => {
+    const input = document.getElementById('search-address');
+    const addr = input.value.trim();
+    if (!addr) return toast('Enter an address to search');
+    const btn = document.getElementById('search-btn');
+    btn.disabled = true;
+    btn.textContent = 'Searching...';
+    const data = await api('POST', '/search-shoot', { address: addr, date: currentDate });
+    if (data.found) {
+      toast('Found and added shoot!');
+      input.value = '';
+    } else {
+      toast(data.error || 'Not found');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Find';
+    loadShoots();
+  });
+
+  // Add shoot manually
+  document.getElementById('add-manual-btn').addEventListener('click', async () => {
+    const input = document.getElementById('search-address');
+    const addr = input.value.trim();
+    if (!addr) return toast('Enter an address first');
+    await api('POST', '/shoots', { address: addr, date: currentDate });
+    toast('Shoot added!');
+    input.value = '';
+    loadShoots();
+  });
+
   // Slack button
   document.getElementById('slack-btn').addEventListener('click', async () => {
     const btn = document.getElementById('slack-btn');

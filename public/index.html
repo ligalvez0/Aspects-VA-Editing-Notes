@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aspects Editing Notes</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Aspects Editing Notes</h1>
+    </header>
+
+    <div class="date-nav">
+      <button id="prev-day">&larr;</button>
+      <span id="current-date"></span>
+      <button id="next-day">&rarr;</button>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-outline" id="sync-btn">Sync Shoots</button>
+      <button class="btn btn-primary" id="slack-btn">Send to Slack</button>
+    </div>
+
+    <div class="author-bar">
+      <label for="author-input">Your name:</label>
+      <input type="text" id="author-input" placeholder="Optional">
+    </div>
+
+    <div id="shoots-container"></div>
+    <div class="toast" id="toast"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

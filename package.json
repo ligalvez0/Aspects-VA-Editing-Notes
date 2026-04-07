@@ -1,0 +1,16 @@
+{
+  "name": "aspects-va-editing-notes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily photography editing notes for VA delivery via Slack",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3"
+  }
+}

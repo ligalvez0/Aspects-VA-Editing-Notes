@@ -85,11 +85,20 @@ router.get('/debug-sync', async (req, res) => {
     const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
     results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-    // Try /orders with uid
-    const uid = process.env.ASPECTS_UID || '168135';
-    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=${uid}`, { headers, signal: AbortSignal.timeout(30000) });
-    const ordersBody = await r2.text();
-    results.orders = { status: r2.status, length: ordersBody.length, preview: ordersBody.slice(0, 2000) };
+    // Fetch specific known order to see full data shape
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/order?oid=2659589`, { headers, signal: AbortSignal.timeout(15000) });
+    const orderBody = await r2.text();
+    results.known_order = { status: r2.status, body: orderBody.slice(0, 3000) };
+
+    // Fetch site to see address data
+    const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=2914195`, { headers, signal: AbortSignal.timeout(15000) });
+    const siteBody = await r3.text();
+    results.known_site = { status: r3.status, body: siteBody.slice(0, 2000) };
+
+    // Try fetching orders for this site (to see if today's orders show up)
+    const r4 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=2914195`, { headers, signal: AbortSignal.timeout(15000) });
+    const siteOrdersBody = await r4.text();
+    results.site_orders = { status: r4.status, body: siteOrdersBody.slice(0, 2000) };
   } catch (err) {
     results.error = err.message;
   }

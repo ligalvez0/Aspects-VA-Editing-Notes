@@ -44,8 +44,7 @@ async function fetchShootsForDate(date) {
     console.log(`[Aspects] Fetching: ${url}`);
     const res = await fetch(url, {
       headers: {
-        'X-API-Key': ASPECTS_API_KEY,
-        'Authorization': `Bearer ${ASPECTS_API_KEY}`,
+        'api_key': ASPECTS_API_KEY,
         'Accept': 'application/json',
       },
     });

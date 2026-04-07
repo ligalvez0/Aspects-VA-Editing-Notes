@@ -77,19 +77,14 @@ router.get('/debug-sync', async (req, res) => {
     return res.json({ error: 'No API configured', ASPECTS_API_URL, ASPECTS_API_KEY: ASPECTS_API_KEY ? '(set)' : '(not set)' });
   }
 
-  // Try multiple auth methods against the orders endpoint
-  const baseUrl = `${ASPECTS_API_URL}/api/v1/orders?date=${date}`;
+  // Test with correct api_key header (from docs) and a few endpoint variations
+  const baseHeaders = { 'api_key': ASPECTS_API_KEY };
   const tests = [
-    { label: 'Bearer header', url: baseUrl, headers: { 'Authorization': `Bearer ${ASPECTS_API_KEY}` } },
-    { label: 'X-API-Key header', url: baseUrl, headers: { 'X-API-Key': ASPECTS_API_KEY } },
-    { label: 'ApiKey header', url: baseUrl, headers: { 'ApiKey': ASPECTS_API_KEY } },
-    { label: 'Api-Key header', url: baseUrl, headers: { 'Api-Key': ASPECTS_API_KEY } },
-    { label: 'apikey query param', url: `${baseUrl}&apikey=${ASPECTS_API_KEY}`, headers: {} },
-    { label: 'key query param', url: `${baseUrl}&key=${ASPECTS_API_KEY}`, headers: {} },
-    { label: 'token query param', url: `${baseUrl}&token=${ASPECTS_API_KEY}`, headers: {} },
-    { label: 'Basic auth', url: baseUrl, headers: { 'Authorization': `Basic ${Buffer.from(ASPECTS_API_KEY + ':').toString('base64')}` } },
-    { label: 'Dashboard endpoint', url: `${ASPECTS_API_URL}/Dashboard/api/orders?date=${date}&apiKey=${ASPECTS_API_KEY}`, headers: {} },
-    { label: 'No v1 prefix', url: `${ASPECTS_API_URL}/api/orders?date=${date}&apiKey=${ASPECTS_API_KEY}`, headers: {} },
+    { label: 'api_key header - /order (list)', url: `${ASPECTS_API_URL}/api/v1/order`, headers: baseHeaders },
+    { label: 'api_key header - /order?date', url: `${ASPECTS_API_URL}/api/v1/order?date=${date}`, headers: baseHeaders },
+    { label: 'api_key header - /orders', url: `${ASPECTS_API_URL}/api/v1/orders?date=${date}`, headers: baseHeaders },
+    { label: 'api_key header - /site', url: `${ASPECTS_API_URL}/api/v1/site`, headers: baseHeaders },
+    { label: 'api_key header - /brand', url: `${ASPECTS_API_URL}/api/v1/brand`, headers: baseHeaders },
   ];
 
   const results = [];

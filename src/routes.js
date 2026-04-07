@@ -80,37 +80,33 @@ router.get('/debug-sync', async (req, res) => {
   const headers = { 'api_key': ASPECTS_API_KEY, 'Accept': 'application/json' };
   const results = {};
 
-  // Test /brand (simplest endpoint to verify auth)
   try {
-    const r = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers });
-    results.brand = { status: r.status, body: (await r.text()).slice(0, 500) };
-  } catch (err) { results.brand = { error: err.message }; }
+    // Test /brand
+    const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
+    results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-  // Get sites list first, then use first site's sid to fetch orders
-  try {
-    const r = await fetch(`${ASPECTS_API_URL}/api/v1/sites`, { headers });
-    const body = await r.text();
-    results.sites = { status: r.status, body: body.slice(0, 3000) };
+    // Test /sites
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/sites`, { headers, signal: AbortSignal.timeout(15000) });
+    const sitesBody = await r2.text();
+    results.sites_status = r2.status;
+    results.sites_length = sitesBody.length;
+    results.sites_preview = sitesBody.slice(0, 500);
 
-    // If sites worked, try orders with the first site's sid
-    if (r.status === 200) {
-      try {
-        const sites = JSON.parse(body);
-        const siteList = Array.isArray(sites) ? sites : [];
-        results.site_count = siteList.length;
-        if (siteList.length > 0) {
-          const sid = siteList[0].sid;
-          results.first_site_sid = sid;
-          const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${sid}`, { headers });
-          results.orders_with_sid = { status: r2.status, body: (await r2.text()).slice(0, 3000) };
-        }
-      } catch (parseErr) { results.parse_error = parseErr.message; }
+    // If sites worked, get first sid and fetch orders
+    if (r2.status === 200) {
+      const sites = JSON.parse(sitesBody);
+      const siteList = Array.isArray(sites) ? sites : [];
+      results.site_count = siteList.length;
+      if (siteList.length > 0) {
+        results.first_site = { sid: siteList[0].sid, address: siteList[0].address, city: siteList[0].city };
+        const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${siteList[0].sid}`, { headers, signal: AbortSignal.timeout(10000) });
+        const ordersBody = await r3.text();
+        results.orders = { status: r3.status, preview: ordersBody.slice(0, 1000) };
+      }
     }
-  } catch (err) { results.sites = { error: err.message }; }
-
-  // Also test the processed result
-  const { fetchShootsForDate } = require('./aspects-api');
-  results.processed = await fetchShootsForDate(date);
+  } catch (err) {
+    results.error = err.message;
+  }
 
   res.json({ date, results });
 });

@@ -161,12 +161,16 @@
   document.getElementById('sync-btn').addEventListener('click', async () => {
     const btn = document.getElementById('sync-btn');
     btn.disabled = true;
-    btn.textContent = 'Syncing...';
-    const data = await api('POST', '/sync', { date: currentDate });
-    if (data.error) {
-      toast(`Sync error: ${data.error.slice(0, 100)}`);
-    } else {
-      toast(`Synced ${data.synced || 0} shoots`);
+    btn.textContent = 'Syncing (may take 1-2 min)...';
+    try {
+      const data = await api('POST', '/sync', { date: currentDate });
+      if (data.error) {
+        toast(`Sync error: ${data.error.slice(0, 100)}`);
+      } else {
+        toast(`Synced ${data.synced || 0} shoots`);
+      }
+    } catch (err) {
+      toast('Sync timed out — try again');
     }
     btn.disabled = false;
     btn.textContent = 'Sync Shoots';

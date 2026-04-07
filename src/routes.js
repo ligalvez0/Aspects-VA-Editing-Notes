@@ -85,26 +85,31 @@ router.get('/debug-sync', async (req, res) => {
     const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
     results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-    // Test different ways to get orders
-    // 1. orders?uid=168135 (owner - only gets orders we placed)
-    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=168135`, { headers, signal: AbortSignal.timeout(30000) });
+    // Fetch all sites and find ones with status "active" or "preparing"
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/sites?uid=168135`, { headers, signal: AbortSignal.timeout(45000) });
     const b2 = await r2.text();
-    results.orders_by_uid = { status: r2.status, count: b2.length, preview: b2.slice(0, 500) };
+    results.sites_status = r2.status;
+    results.sites_length = b2.length;
 
-    // 2. Try sites endpoint with uid to get active sites
-    const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/sites?uid=168135`, { headers, signal: AbortSignal.timeout(30000) });
-    const b3 = await r3.text();
-    results.sites_by_uid = { status: r3.status, length: b3.length, preview: b3.slice(0, 500) };
+    if (r2.status === 200) {
+      const sites = JSON.parse(b2);
+      const siteList = Array.isArray(sites) ? sites : [];
+      results.total_sites = siteList.length;
 
-    // 3. Try groups endpoint
-    const r4 = await fetch(`${ASPECTS_API_URL}/api/v1/groups`, { headers, signal: AbortSignal.timeout(15000) });
-    const b4 = await r4.text();
-    results.groups = { status: r4.status, body: b4.slice(0, 500) };
+      // Show active/preparing sites
+      const activeSites = siteList.filter(s => s.status === 'active' || s.status === 'preparing');
+      results.active_sites_count = activeSites.length;
+      results.active_sites = activeSites.slice(0, 5).map(s => ({
+        sid: s.sid, status: s.status, address: s.address, city: s.city, created: s.created
+      }));
 
-    // 4. Try users to find other user accounts
-    const r5 = await fetch(`${ASPECTS_API_URL}/api/v1/users`, { headers, signal: AbortSignal.timeout(15000) });
-    const b5 = await r5.text();
-    results.users = { status: r5.status, length: b5.length, preview: b5.slice(0, 1000) };
+      // For the first active site, fetch its orders to see task apptdates
+      if (activeSites.length > 0) {
+        const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${activeSites[0].sid}`, { headers, signal: AbortSignal.timeout(15000) });
+        const b3 = await r3.text();
+        results.first_active_site_orders = { sid: activeSites[0].sid, status: r3.status, body: b3.slice(0, 1500) };
+      }
+    }
   } catch (err) {
     results.error = err.message;
   }

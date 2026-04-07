@@ -69,7 +69,16 @@ router.post('/slack/send', async (req, res) => {
 
 // Health check
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString(),
+    config: {
+      slackConfigured: !!process.env.SLACK_WEBHOOK_URL,
+      aspectsConfigured: !!process.env.ASPECTS_API_URL && !!process.env.ASPECTS_API_KEY,
+      aspectsApiUrl: process.env.ASPECTS_API_URL || '(not set)',
+      tz: process.env.TZ || '(not set)',
+    },
+  });
 });
 
 module.exports = router;

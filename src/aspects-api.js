@@ -1,5 +1,6 @@
 const ASPECTS_API_URL = process.env.ASPECTS_API_URL;
 const ASPECTS_API_KEY = process.env.ASPECTS_API_KEY;
+const ASPECTS_UID = process.env.ASPECTS_UID || '168135';
 
 function generateMockShoots(date) {
   return {
@@ -39,15 +40,15 @@ async function fetchShootsForDate(date) {
   }
 
   try {
-    // HDPhotoHub API v1 - GET /order
-    // Returns all orders; we filter by date client-side
-    const url = `${ASPECTS_API_URL}/api/v1/order`;
+    // HDPhotoHub API v1 - GET /orders?uid=<UserID>
+    const url = `${ASPECTS_API_URL}/api/v1/orders?uid=${ASPECTS_UID}`;
     console.log(`[Aspects] Fetching: ${url}`);
     const res = await fetch(url, {
       headers: {
         'api_key': ASPECTS_API_KEY,
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(30000),
     });
 
     const body = await res.text();
@@ -66,41 +67,42 @@ async function fetchShootsForDate(date) {
     }
 
     // API returns an array of order objects
-    const orders = Array.isArray(data) ? data : (data.orders || data.results || data.data || []);
+    const orders = Array.isArray(data) ? data : [];
     console.log(`[Aspects] Got ${orders.length} total orders`);
 
     // Filter to orders matching the requested date
     const filtered = orders.filter((order) => {
       if (!order.date) return false;
-      // order.date is a date-time string; compare just the date portion
       const orderDate = order.date.slice(0, 10);
       return orderDate === date;
     });
 
     console.log(`[Aspects] ${filtered.length} orders match date ${date}`);
 
-    // Map to our internal format
+    // Map to our internal format using site address data
     const shoots = filtered.map((order) => {
-      // Build address from site info if available
-      const address = order.siteAddress || order.address || order.site_address || `Order #${order.oid}`;
+      // Address from the order's site
+      const address = order.address || order.siteAddress || `Order #${order.oid}`;
 
-      // Find photographer from tasks
+      // Photographer from first task's memberassigned
       let photographer = '';
       if (order.tasks && order.tasks.length > 0) {
         photographer = order.tasks[0].memberassigned || '';
       }
 
-      // Extract time from date or tasks
+      // Time from task appointment date or order date
       let time = '';
-      if (order.date) {
-        const d = new Date(order.date);
-        if (d.getHours() !== 0 || d.getMinutes() !== 0) {
-          time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      if (order.tasks && order.tasks.length > 0 && order.tasks[0].apptdate) {
+        const d = new Date(order.tasks[0].apptdate);
+        if (!isNaN(d.getTime())) {
+          time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
         }
       }
-      if (!time && order.tasks && order.tasks.length > 0 && order.tasks[0].apptdate) {
-        const d = new Date(order.tasks[0].apptdate);
-        time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      if (!time && order.date) {
+        const d = new Date(order.date);
+        if (!isNaN(d.getTime()) && (d.getUTCHours() !== 0 || d.getUTCMinutes() !== 0)) {
+          time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
+        }
       }
 
       return {
@@ -120,20 +122,4 @@ async function fetchShootsForDate(date) {
   }
 }
 
-// Fetch sites list (for debugging/setup)
-async function fetchSites() {
-  if (!ASPECTS_API_URL || !ASPECTS_API_KEY) {
-    return { error: 'No API configured' };
-  }
-  try {
-    const res = await fetch(`${ASPECTS_API_URL}/api/v1/site`, {
-      headers: { 'api_key': ASPECTS_API_KEY, 'Accept': 'application/json' },
-    });
-    const body = await res.text();
-    return { status: res.status, body: body.slice(0, 2000) };
-  } catch (err) {
-    return { error: err.message };
-  }
-}
-
-module.exports = { fetchShootsForDate, fetchSites };
+module.exports = { fetchShootsForDate };

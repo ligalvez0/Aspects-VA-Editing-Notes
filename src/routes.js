@@ -85,15 +85,11 @@ router.get('/debug-sync', async (req, res) => {
     const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
     results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-    // Try /orders without any params
-    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders`, { headers, signal: AbortSignal.timeout(30000) });
+    // Try /orders with uid
+    const uid = process.env.ASPECTS_UID || '168135';
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?uid=${uid}`, { headers, signal: AbortSignal.timeout(30000) });
     const ordersBody = await r2.text();
-    results.orders_no_params = { status: r2.status, length: ordersBody.length, preview: ordersBody.slice(0, 1500) };
-
-    // Try /orders with bid
-    const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?bid=2194`, { headers, signal: AbortSignal.timeout(30000) });
-    const ordersBody3 = await r3.text();
-    results.orders_with_bid = { status: r3.status, length: ordersBody3.length, preview: ordersBody3.slice(0, 1500) };
+    results.orders = { status: r2.status, length: ordersBody.length, preview: ordersBody.slice(0, 2000) };
   } catch (err) {
     results.error = err.message;
   }

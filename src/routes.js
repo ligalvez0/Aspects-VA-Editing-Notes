@@ -86,23 +86,28 @@ router.get('/debug-sync', async (req, res) => {
     results.brand = { status: r.status, body: (await r.text()).slice(0, 500) };
   } catch (err) { results.brand = { error: err.message }; }
 
-  // Test /orders (plural)
-  try {
-    const r = await fetch(`${ASPECTS_API_URL}/api/v1/orders`, { headers });
-    results.orders_plural = { status: r.status, body: (await r.text()).slice(0, 2000) };
-  } catch (err) { results.orders_plural = { error: err.message }; }
+  const bid = 2194; // brand ID from /brand response
+  const endpoints = [
+    `/api/v1/orders`,
+    `/api/v1/orders?bid=${bid}`,
+    `/api/v1/order`,
+    `/api/v1/order?bid=${bid}`,
+    `/api/v1/sites`,
+    `/api/v1/sites?bid=${bid}`,
+    `/api/v1/site?bid=${bid}`,
+    `/api/v1/groups`,
+    `/api/v1/group`,
+    `/api/v1/users`,
+    `/api/v1/user`,
+  ];
 
-  // Test /order (singular)
-  try {
-    const r = await fetch(`${ASPECTS_API_URL}/api/v1/order`, { headers });
-    results.order_singular = { status: r.status, body: (await r.text()).slice(0, 2000) };
-  } catch (err) { results.order_singular = { error: err.message }; }
-
-  // Test /site (list of sites)
-  try {
-    const r = await fetch(`${ASPECTS_API_URL}/api/v1/site`, { headers });
-    results.sites = { status: r.status, body: (await r.text()).slice(0, 2000) };
-  } catch (err) { results.sites = { error: err.message }; }
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(`${ASPECTS_API_URL}${ep}`, { headers });
+      const body = await r.text();
+      results[ep] = { status: r.status, body: body.slice(0, 500) };
+    } catch (err) { results[ep] = { error: err.message }; }
+  }
 
   // Also test the processed result
   const { fetchShootsForDate } = require('./aspects-api');

@@ -67,6 +67,45 @@ router.post('/slack/send', async (req, res) => {
   }
 });
 
+// Debug: show raw Aspects API response so we can see the data format
+router.get('/debug-sync', async (req, res) => {
+  const date = req.query.date || todayDate();
+  const ASPECTS_API_URL = process.env.ASPECTS_API_URL;
+  const ASPECTS_API_KEY = process.env.ASPECTS_API_KEY;
+
+  if (!ASPECTS_API_URL || !ASPECTS_API_KEY) {
+    return res.json({ error: 'No API configured', ASPECTS_API_URL, ASPECTS_API_KEY: ASPECTS_API_KEY ? '(set)' : '(not set)' });
+  }
+
+  // Try multiple possible endpoints
+  const urls = [
+    `${ASPECTS_API_URL}/api/v1/orders?date=${date}`,
+    `${ASPECTS_API_URL}/api/v1/orders?date=${date}&apiKey=${ASPECTS_API_KEY}`,
+    `${ASPECTS_API_URL}/api/v1/jobs?date=${date}`,
+    `${ASPECTS_API_URL}/api/v1/shoots?date=${date}`,
+    `${ASPECTS_API_URL}/api/v1/schedule?date=${date}`,
+  ];
+
+  const results = [];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: {
+          'X-API-Key': ASPECTS_API_KEY,
+          'Authorization': `Bearer ${ASPECTS_API_KEY}`,
+          'Accept': 'application/json',
+        },
+      });
+      const body = await r.text();
+      results.push({ url, status: r.status, body: body.slice(0, 1000) });
+    } catch (err) {
+      results.push({ url, error: err.message });
+    }
+  }
+
+  res.json({ date, results });
+});
+
 // Health check
 router.get('/health', (req, res) => {
   res.json({

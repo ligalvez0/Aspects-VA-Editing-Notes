@@ -2,7 +2,7 @@ const ASPECTS_API_URL = process.env.ASPECTS_API_URL;
 const ASPECTS_API_KEY = process.env.ASPECTS_API_KEY;
 const ASPECTS_UID = process.env.ASPECTS_UID || '168135';
 
-const headers = () => ({
+const apiHeaders = () => ({
   'api_key': ASPECTS_API_KEY,
   'Accept': 'application/json',
 });
@@ -17,51 +17,23 @@ function generateMockShoots(date) {
   };
 }
 
-// Parse Aspects date format "M/D/YYYY h:mm:ss AM/PM" to YYYY-MM-DD
-function parseAspectsDate(dateStr) {
+// Parse Aspects date "M/D/YYYY h:mm:ss AM/PM" to YYYY-MM-DD in Pacific time
+function toDateStr(dateStr) {
   if (!dateStr) return null;
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return null;
-    // Format as YYYY-MM-DD in Pacific time
     return d.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// Format time from Aspects date
-function parseAspectsTime(dateStr) {
+function toTimeStr(dateStr) {
   if (!dateStr) return '';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return '';
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
-  } catch {
-    return '';
-  }
-}
-
-// Fetch site address by sid (with simple cache)
-const siteCache = {};
-async function getSiteAddress(sid) {
-  if (siteCache[sid]) return siteCache[sid];
-  try {
-    const res = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=${sid}`, {
-      headers: headers(),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (res.ok) {
-      const site = await res.json();
-      const parts = [site.address, site.city, site.state, site.zip].filter(Boolean);
-      const addr = parts.length > 0 ? parts.join(', ') : `Site #${sid}`;
-      siteCache[sid] = addr;
-      return addr;
-    }
-  } catch (err) {
-    console.error(`[Aspects] Failed to fetch site ${sid}:`, err.message);
-  }
-  return `Site #${sid}`;
+  } catch { return ''; }
 }
 
 async function fetchShootsForDate(date) {
@@ -71,54 +43,64 @@ async function fetchShootsForDate(date) {
   }
 
   try {
+    // Step 1: Fetch all orders for our user
     const url = `${ASPECTS_API_URL}/api/v1/orders?uid=${ASPECTS_UID}`;
-    console.log(`[Aspects] Fetching: ${url}`);
+    console.log(`[Aspects] Fetching orders: ${url}`);
     const res = await fetch(url, {
-      headers: headers(),
+      headers: apiHeaders(),
       signal: AbortSignal.timeout(60000),
     });
 
     const body = await res.text();
-
     if (!res.ok) {
-      console.error(`[Aspects] API returned ${res.status}: ${body.slice(0, 500)}`);
-      return { error: `Aspects API returned ${res.status}: ${body.slice(0, 200)}`, shoots: [] };
+      return { error: `API returned ${res.status}: ${body.slice(0, 200)}`, shoots: [] };
     }
 
-    let data;
-    try {
-      data = JSON.parse(body);
-    } catch {
-      console.error('[Aspects] Non-JSON response:', body.slice(0, 500));
-      return { error: 'Aspects API returned non-JSON response', shoots: [] };
+    let orders;
+    try { orders = JSON.parse(body); } catch {
+      return { error: 'Non-JSON response from API', shoots: [] };
     }
-
-    const orders = Array.isArray(data) ? data : [];
+    if (!Array.isArray(orders)) orders = [];
     console.log(`[Aspects] Got ${orders.length} total orders`);
 
-    // Filter to orders matching the requested date
-    const filtered = orders.filter((order) => {
-      const orderDate = parseAspectsDate(order.date);
-      return orderDate === date;
+    // Step 2: Filter orders that have tasks with apptdate matching today
+    const matchingOrders = orders.filter((order) => {
+      if (!order.tasks || order.tasks.length === 0) return false;
+      return order.tasks.some((task) => toDateStr(task.apptdate) === date);
     });
 
-    console.log(`[Aspects] ${filtered.length} orders match date ${date}`);
+    console.log(`[Aspects] ${matchingOrders.length} orders have tasks on ${date}`);
+    if (matchingOrders.length === 0) {
+      return { shoots: [] };
+    }
 
-    // Map to our internal format, fetching site addresses
-    const shoots = await Promise.all(filtered.map(async (order) => {
-      const address = await getSiteAddress(order.sid);
+    // Step 3: Fetch site details for each matching order to get addresses
+    const shoots = await Promise.all(matchingOrders.map(async (order) => {
+      // Get site address
+      let address = `Order #${order.oid}`;
+      try {
+        const siteRes = await fetch(`${ASPECTS_API_URL}/api/v1/site?sid=${order.sid}`, {
+          headers: apiHeaders(),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (siteRes.ok) {
+          const site = await siteRes.json();
+          const parts = [site.address, site.city, site.state, site.zip].filter(Boolean);
+          if (parts.length > 0) address = parts.join(', ');
+        }
+      } catch (err) {
+        console.error(`[Aspects] Failed to fetch site ${order.sid}:`, err.message);
+      }
 
+      // Get photographer and time from first task with matching apptdate
       let photographer = '';
-      if (order.tasks && order.tasks.length > 0) {
-        photographer = order.tasks[0].memberassigned || '';
-      }
-
       let time = '';
-      if (order.tasks && order.tasks.length > 0 && order.tasks[0].apptdate) {
-        time = parseAspectsTime(order.tasks[0].apptdate);
-      }
-      if (!time && order.date) {
-        time = parseAspectsTime(order.date);
+      for (const task of order.tasks) {
+        if (toDateStr(task.apptdate) === date) {
+          photographer = task.memberassigned || '';
+          time = toTimeStr(task.apptdate);
+          break;
+        }
       }
 
       return {

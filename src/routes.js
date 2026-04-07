@@ -85,30 +85,28 @@ router.get('/debug-sync', async (req, res) => {
     const r1 = await fetch(`${ASPECTS_API_URL}/api/v1/brand`, { headers, signal: AbortSignal.timeout(10000) });
     results.brand = { status: r1.status, body: (await r1.text()).slice(0, 300) };
 
-    // Fetch all sites and find ones with status "active" or "preparing"
-    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/sites?uid=168135`, { headers, signal: AbortSignal.timeout(45000) });
+    // Fetch sites without uid (all brand sites) - may be large
+    const r2 = await fetch(`${ASPECTS_API_URL}/api/v1/sites`, { headers, signal: AbortSignal.timeout(60000) });
     const b2 = await r2.text();
-    results.sites_status = r2.status;
-    results.sites_length = b2.length;
+    results.all_sites_status = r2.status;
+    results.all_sites_length = b2.length;
 
     if (r2.status === 200) {
       const sites = JSON.parse(b2);
       const siteList = Array.isArray(sites) ? sites : [];
       results.total_sites = siteList.length;
 
-      // Show active/preparing sites
-      const activeSites = siteList.filter(s => s.status === 'active' || s.status === 'preparing');
-      results.active_sites_count = activeSites.length;
-      results.active_sites = activeSites.slice(0, 5).map(s => ({
-        sid: s.sid, status: s.status, address: s.address, city: s.city, created: s.created
-      }));
+      // Count by status
+      const statusCounts = {};
+      siteList.forEach(s => { statusCounts[s.status] = (statusCounts[s.status] || 0) + 1; });
+      results.status_counts = statusCounts;
 
-      // For the first active site, fetch its orders to see task apptdates
-      if (activeSites.length > 0) {
-        const r3 = await fetch(`${ASPECTS_API_URL}/api/v1/orders?sid=${activeSites[0].sid}`, { headers, signal: AbortSignal.timeout(15000) });
-        const b3 = await r3.text();
-        results.first_active_site_orders = { sid: activeSites[0].sid, status: r3.status, body: b3.slice(0, 1500) };
-      }
+      // Show "preparing" sites (these are likely today's shoots)
+      const preparing = siteList.filter(s => s.status === 'preparing');
+      results.preparing_count = preparing.length;
+      results.preparing_sites = preparing.slice(0, 10).map(s => ({
+        sid: s.sid, address: s.address, city: s.city, state: s.state, created: s.created
+      }));
     }
   } catch (err) {
     results.error = err.message;

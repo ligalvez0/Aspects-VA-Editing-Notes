@@ -2,16 +2,16 @@ const cron = require('node-cron');
 const { getShootsByDate } = require('./db');
 const { formatSlackMessage, sendToSlack } = require('./slack');
 
-function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+function todayDatePacific() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 }
 
 function startScheduler() {
-  const slackCron = process.env.SLACK_CRON || '0 21 * * 1-5';
+  const slackCron = process.env.SLACK_CRON || '5 20 * * 1-5';
 
-  // End-of-day Slack delivery at 9 PM Pacific
+  // End-of-day Slack delivery at 8:05 PM Pacific
   cron.schedule(slackCron, async () => {
-    const date = todayDate();
+    const date = todayDatePacific();
     console.log(`[Scheduler] Sending Slack message for ${date}`);
     try {
       const shoots = getShootsByDate(date);

@@ -64,6 +64,18 @@
         </li>
       `).join('');
 
+      const imagesHtml = (shoot.images || []).map(img => {
+        const url = '/uploads/' + encodeURIComponent(img.filename);
+        return `
+          <div class="image-thumb" data-image-id="${img.id}">
+            <a href="${url}" target="_blank" rel="noopener" title="${esc(img.original_name || 'View image')}">
+              <img src="${url}" alt="${esc(img.original_name || 'Attached image')}" loading="lazy">
+            </a>
+            <button class="image-delete" title="Delete image">&times;</button>
+          </div>
+        `;
+      }).join('');
+
       return `
         <div class="shoot-card" data-shoot-id="${shoot.id}">
           <div class="shoot-header">
@@ -77,6 +89,13 @@
           <div class="add-note">
             <input type="text" placeholder="Add a note..." class="note-input">
             <button class="add-note-btn">Add</button>
+          </div>
+          <div class="images-section">
+            ${imagesHtml ? '<div class="image-grid">' + imagesHtml + '</div>' : ''}
+            <label class="image-upload-btn">
+              <input type="file" accept="image/*" class="image-input" hidden>
+              <span class="image-upload-label">+ Attach image</span>
+            </label>
           </div>
         </div>
       `;
@@ -110,6 +129,50 @@
         }
       });
     });
+
+    // Image upload handlers
+    container.querySelectorAll('.image-input').forEach(input => {
+      const card = input.closest('.shoot-card');
+      input.addEventListener('change', () => {
+        if (input.files && input.files[0]) {
+          uploadImageHandler(card.dataset.shootId, input.files[0]);
+        }
+      });
+    });
+
+    // Image delete handlers
+    container.querySelectorAll('.image-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const thumb = btn.closest('.image-thumb');
+        if (confirm('Delete this image?')) {
+          deleteImageHandler(thumb.dataset.imageId);
+        }
+      });
+    });
+  }
+
+  async function uploadImageHandler(shootId, file) {
+    const form = new FormData();
+    form.append('image', file);
+    toast('Uploading image...');
+    try {
+      const res = await fetch('/api/shoots/' + shootId + '/images', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error || 'Upload failed');
+        return;
+      }
+      toast('Image attached');
+      loadShoots();
+    } catch (err) {
+      toast('Upload failed');
+    }
+  }
+
+  async function deleteImageHandler(imageId) {
+    await api('DELETE', '/images/' + imageId);
+    toast('Image deleted');
+    loadShoots();
   }
 
   async function addNoteHandler(shootId, input) {

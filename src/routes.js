@@ -1,11 +1,43 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const multer = require('multer');
 const router = express.Router();
-const { upsertShoots, getShootsByDate, addNote, updateNote, deleteNote, deleteShoot } = require('./db');
+const { upsertShoots, getShootsByDate, addNote, updateNote, deleteNote, addImage, getImage, getImagesByShoot, deleteImage, deleteShoot } = require('./db');
 const { searchShootByAddress } = require('./aspects-api');
 const { formatSlackMessage, sendToSlack } = require('./slack');
 
+const UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads');
+
 function todayDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// Multer storage: random filenames under data/uploads, images only, 10MB cap
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    cb(null, UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = (path.extname(file.originalname) || '').toLowerCase().slice(0, 10);
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\//.test(file.mimetype)) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+  },
+});
+
+function removeUploadFile(filename) {
+  if (!filename) return;
+  fs.unlink(path.join(UPLOAD_DIR, filename), () => {});
 }
 
 // Get shoots + notes for a date
@@ -36,6 +68,26 @@ router.put('/notes/:id', (req, res) => {
 // Delete a note
 router.delete('/notes/:id', (req, res) => {
   deleteNote(req.params.id);
+  res.json({ ok: true });
+});
+
+// Upload an image for a shoot
+router.post('/shoots/:id/images', (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    const image = addImage(req.params.id, req.file.filename, req.file.originalname);
+    res.json({ image: { ...image, url: `/uploads/${image.filename}` } });
+  });
+});
+
+// Delete an image
+router.delete('/images/:id', (req, res) => {
+  const image = getImage(req.params.id);
+  if (image) {
+    deleteImage(image.id);
+    removeUploadFile(image.filename);
+  }
   res.json({ ok: true });
 });
 
@@ -71,6 +123,9 @@ router.post('/shoots', (req, res) => {
 
 // Delete a shoot
 router.delete('/shoots/:id', (req, res) => {
+  for (const image of getImagesByShoot(req.params.id)) {
+    removeUploadFile(image.filename);
+  }
   deleteShoot(req.params.id);
   res.json({ ok: true });
 });

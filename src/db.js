@@ -32,6 +32,15 @@ function initDb() {
       updated_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_notes_shoot ON notes(shoot_id);
+
+    CREATE TABLE IF NOT EXISTS images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shoot_id TEXT NOT NULL REFERENCES shoots(id),
+      filename TEXT NOT NULL,
+      original_name TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_images_shoot ON images(shoot_id);
   `);
 
   return db;
@@ -60,9 +69,11 @@ function upsertShoots(shootsArray) {
 function getShootsByDate(date) {
   const shoots = db.prepare('SELECT * FROM shoots WHERE date = ? ORDER BY time').all(date);
   const noteStmt = db.prepare('SELECT * FROM notes WHERE shoot_id = ? ORDER BY created_at');
+  const imageStmt = db.prepare('SELECT * FROM images WHERE shoot_id = ? ORDER BY created_at');
   return shoots.map((s) => ({
     ...s,
     notes: noteStmt.all(s.id),
+    images: imageStmt.all(s.id),
   }));
 }
 
@@ -83,9 +94,29 @@ function deleteNote(noteId) {
   db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
 }
 
+function addImage(shootId, filename, originalName) {
+  const result = db.prepare(
+    'INSERT INTO images (shoot_id, filename, original_name) VALUES (?, ?, ?)'
+  ).run(shootId, filename, originalName || '');
+  return db.prepare('SELECT * FROM images WHERE id = ?').get(result.lastInsertRowid);
+}
+
+function getImage(imageId) {
+  return db.prepare('SELECT * FROM images WHERE id = ?').get(imageId);
+}
+
+function getImagesByShoot(shootId) {
+  return db.prepare('SELECT * FROM images WHERE shoot_id = ? ORDER BY created_at').all(shootId);
+}
+
+function deleteImage(imageId) {
+  db.prepare('DELETE FROM images WHERE id = ?').run(imageId);
+}
+
 function deleteShoot(shootId) {
   db.prepare('DELETE FROM notes WHERE shoot_id = ?').run(shootId);
+  db.prepare('DELETE FROM images WHERE shoot_id = ?').run(shootId);
   db.prepare('DELETE FROM shoots WHERE id = ?').run(shootId);
 }
 
-module.exports = { initDb, getDb, upsertShoots, getShootsByDate, addNote, updateNote, deleteNote, deleteShoot };
+module.exports = { initDb, getDb, upsertShoots, getShootsByDate, addNote, updateNote, deleteNote, addImage, getImage, getImagesByShoot, deleteImage, deleteShoot };

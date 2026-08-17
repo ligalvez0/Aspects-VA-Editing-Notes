@@ -228,6 +228,73 @@ header h1 {
   font-size: 0.875rem;
 }
 
+.images-section {
+  margin-top: 12px;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.image-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.image-delete:hover { background: var(--danger); }
+
+.image-upload-btn {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.image-upload-label {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.image-upload-btn:hover .image-upload-label {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .empty {
   text-align: center;
   color: var(--muted);

@@ -4,7 +4,13 @@
   const authorInput = document.getElementById('author-input');
   const toastEl = document.getElementById('toast');
 
-  let currentDate = todayStr();
+  // Open the date from the URL (?date=YYYY-MM-DD) if valid, else today
+  function initialDate() {
+    const param = new URLSearchParams(window.location.search).get('date');
+    return /^\d{4}-\d{2}-\d{2}$/.test(param || '') ? param : todayStr();
+  }
+
+  let currentDate = initialDate();
 
   // Restore saved author name
   authorInput.value = localStorage.getItem('author') || '';

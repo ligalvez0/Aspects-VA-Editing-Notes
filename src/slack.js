@@ -1,14 +1,24 @@
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 const SLACK_VA_ID = process.env.SLACK_VA_ID || 'U0AQEU7HSKH';
+const SLACK_EDITOR_ID = process.env.SLACK_EDITOR_ID || 'U0B4LFFNFLN';
+const APP_URL = process.env.APP_URL || 'https://aspects-va-editing-notes-production.up.railway.app';
 
 function formatSlackMessage(date, shootsWithNotes) {
   const d = new Date(date + 'T12:00:00');
   const dayName = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  // Mention VA by Slack user ID if set, otherwise by name
-  const mention = SLACK_VA_ID ? `<@${SLACK_VA_ID}>` : '@Stephen Cruz';
+  // Mention the VA and the editor by Slack user ID (falls back to a name if unset)
+  const mentions = [
+    SLACK_VA_ID ? `<@${SLACK_VA_ID}>` : '@Stephen Cruz',
+    SLACK_EDITOR_ID ? `<@${SLACK_EDITOR_ID}>` : null,
+  ].filter(Boolean).join(' ');
 
-  let text = `:camera_with_flash: *Editing Notes for ${dayName}*\n${mention}\n\n`;
+  // Deep link back to the site for this date so they can view notes & images
+  const link = APP_URL ? `${APP_URL.replace(/\/$/, '')}/?date=${date}` : '';
+
+  let text = `:camera_with_flash: *Editing Notes for ${dayName}*\n${mentions}\n`;
+  if (link) text += `:link: <${link}|View notes & images on the site>\n`;
+  text += '\n';
 
   if (shootsWithNotes.length === 0) {
     text += '_No shoots scheduled for today._';
